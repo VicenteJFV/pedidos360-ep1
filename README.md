@@ -184,6 +184,18 @@ mvn test
 
 Sirven para la defensa: son la evidencia de que las reglas de negocio funcionan, independiente de que la infraestructura esté arriba.
 
+### Verificación de punta a punta en local (sin AWS ni Entra ID)
+
+```bash
+cd C:\dev\pedidos360\pruebas ; .\verificar-local.ps1
+```
+
+Levanta los dos microservicios, ejecuta 19 comprobaciones sobre HTTP real y los apaga al terminar. A diferencia de `mvn test`, esto sí prueba que Tomcat arranca, que la serialización JSON funciona y que la comunicación pedidos → catálogo ocurre por la red.
+
+Comprueba entre otras cosas que crear un pedido **no** descuenta stock, que aceptarlo **sí** lo descuenta, que cancelar lo repone, que no se puede despachar sin aceptar, y que los microservicios **no** son accesibles desde fuera de loopback.
+
+Córrelo antes de subir nada a AWS: depurar en tu máquina es mucho más rápido que por SSH en una EC2.
+
 ### Token de Entra ID
 
 ```powershell
