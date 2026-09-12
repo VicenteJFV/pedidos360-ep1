@@ -37,12 +37,26 @@ $ErrorActionPreference = "Stop"
 
 function Invoke-Aws {
     param([string[]]$Argumentos)
-    $salida = & aws @Argumentos --region $Region --output json 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Fallo el comando: aws $($Argumentos -join ' ')`n$salida"
+
+    # Ver el comentario equivalente en 00-crear-ec2.ps1: en PowerShell 5.1 el
+    # stderr de un ejecutable nativo se convierte en error terminante bajo
+    # $ErrorActionPreference = 'Stop', incluso con codigo de salida 0.
+    $previo = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $salida = & aws @Argumentos --region $Region --output json 2>&1
+        $codigo = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previo
     }
-    if ([string]::IsNullOrWhiteSpace($salida)) { return $null }
-    return ($salida | Out-String | ConvertFrom-Json)
+
+    if ($codigo -ne 0) {
+        throw "Fallo el comando: aws $($Argumentos -join ' ')`n$($salida | Out-String)"
+    }
+
+    $texto = ($salida | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($texto)) { return $null }
+    return ($texto | ConvertFrom-Json)
 }
 
 # ---------------------------------------------------------------------------

@@ -17,23 +17,43 @@
 param(
     [string]$Region = "us-east-1",
     [string]$NombreInstancia = "pedidos360-bff",
-    [string]$NombreSg = "sg-pedidos360-bff",
+    [string]$NombreSg = "pedidos360-bff-sg",
     [string]$NombreLlave = "pedidos360-key",
     [string]$TipoInstancia = "t3.micro",
-    [int]$PuertoBff = 8080
+    [int]$PuertoBff = 8080,
+
+    # Asigna y asocia una Elastic IP para que la direccion publica no cambie
+    # entre sesiones del lab. Si la cuenta no lo permite, avisa y continua.
+    [switch]$ConIpElastica
 )
 
 $ErrorActionPreference = "Stop"
 
 function Invoke-Aws {
     param([string[]]$Argumentos, [switch]$PermitirFallo)
-    $salida = & aws @Argumentos --region $Region --output json 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        if ($PermitirFallo) { return $null }
-        throw "Fallo el comando: aws $($Argumentos -join ' ')`n$salida"
+
+    # En PowerShell 5.1, redirigir 2>&1 sobre un ejecutable nativo envuelve cada
+    # linea de stderr en un ErrorRecord. Con $ErrorActionPreference = 'Stop' eso
+    # aborta el script aunque el AWS CLI haya terminado con codigo 0 y solo haya
+    # escrito un aviso. Por eso se baja la preferencia solo alrededor de la
+    # llamada y se decide el exito con $LASTEXITCODE, que es la unica senal fiable.
+    $previo = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $salida = & aws @Argumentos --region $Region --output json 2>&1
+        $codigo = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previo
     }
-    if ([string]::IsNullOrWhiteSpace($salida)) { return $null }
-    return ($salida | Out-String | ConvertFrom-Json)
+
+    if ($codigo -ne 0) {
+        if ($PermitirFallo) { return $null }
+        throw "Fallo el comando: aws $($Argumentos -join ' ')`n$($salida | Out-String)"
+    }
+
+    $texto = ($salida | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($texto)) { return $null }
+    return ($texto | ConvertFrom-Json)
 }
 
 # ---------------------------------------------------------------------------
@@ -158,6 +178,51 @@ if ($existentes.Reservations.Count -gt 0) {
 }
 
 $instanciaId = $instancia.InstanceId
+
+# ---------------------------------------------------------------------------
+# 4b. Elastic IP (opcional pero muy recomendable en el Learner Lab)
+# ---------------------------------------------------------------------------
+#
+# Sin IP elastica, la instancia recibe una IP publica distinta cada vez que se
+# detiene y arranca, o sea en cada sesion del lab, y hay que re-apuntar las 22
+# integraciones del API Gateway. Con una IP elastica asociada, la direccion
+# sobrevive a los reinicios y el API Gateway no se toca nunca mas.
+
+if ($ConIpElastica) {
+    $etiqueta = "$NombreInstancia-eip"
+
+    $existentes = Invoke-Aws @("ec2", "describe-addresses",
+        "--filters", "Name=tag:Name,Values=$etiqueta") -PermitirFallo
+
+    if ($existentes -and $existentes.Addresses.Count -gt 0) {
+        $eip = $existentes.Addresses[0]
+        Write-Host "[4b] Elastic IP existente reutilizada: $($eip.PublicIp)" -ForegroundColor Yellow
+        $allocationId = $eip.AllocationId
+        $ipElastica = $eip.PublicIp
+    } else {
+        $nueva = Invoke-Aws @("ec2", "allocate-address",
+            "--domain", "vpc",
+            "--tag-specifications", "ResourceType=elastic-ip,Tags=[{Key=Name,Value=$etiqueta}]") -PermitirFallo
+
+        if (-not $nueva) {
+            Write-Host "[4b] Esta cuenta no permite asignar Elastic IP. Se continua con la IP dinamica." -ForegroundColor Yellow
+            Write-Host "     Tendras que correr 03-actualizar-destino-bff.ps1 al inicio de cada sesion." -ForegroundColor Yellow
+            $allocationId = $null
+        } else {
+            $allocationId = $nueva.AllocationId
+            $ipElastica = $nueva.PublicIp
+            Write-Host "[4b] Elastic IP asignada: $ipElastica" -ForegroundColor Green
+        }
+    }
+
+    if ($allocationId) {
+        Invoke-Aws @("ec2", "associate-address",
+            "--instance-id", $instanciaId,
+            "--allocation-id", $allocationId) | Out-Null
+        Write-Host "     Asociada a $instanciaId. La IP ya no cambia entre sesiones." -ForegroundColor Green
+    }
+}
+
 $descripcion = Invoke-Aws @("ec2", "describe-instances", "--instance-ids", $instanciaId)
 $ipPublica = $descripcion.Reservations[0].Instances[0].PublicIpAddress
 
@@ -183,6 +248,15 @@ Write-Host ""
 Write-Host "  3. Apuntar el API Gateway a esta instancia:"
 Write-Host "     .\02-desplegar-api-gateway.ps1 -DestinoBff `"http://${ipPublica}:$PuertoBff`"" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "  En sesiones siguientes del lab, la IP cambia. Solo hay que correr:"
-Write-Host "     .\03-actualizar-destino-bff.ps1 -DesdeInstancia $instanciaId" -ForegroundColor DarkGray
+if ($ConIpElastica -and $allocationId) {
+    Write-Host "  Con la Elastic IP asociada, esta direccion sobrevive a los reinicios:" -ForegroundColor Green
+    Write-Host "  en las proximas sesiones del lab solo tienes que arrancar la instancia," -ForegroundColor Green
+    Write-Host "  sin tocar el API Gateway." -ForegroundColor Green
+    Write-Host ""
+    Write-Host "     aws ec2 start-instances --instance-ids $instanciaId --region $Region" -ForegroundColor DarkGray
+} else {
+    Write-Host "  Sin Elastic IP, la direccion cambia en cada sesion del lab."
+    Write-Host "  Despues de arrancar la instancia hay que re-apuntar el API Gateway:"
+    Write-Host "     .\03-actualizar-destino-bff.ps1 -DesdeInstancia $instanciaId" -ForegroundColor DarkGray
+}
 Write-Host ""

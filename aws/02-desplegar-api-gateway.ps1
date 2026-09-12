@@ -46,14 +46,44 @@ $Issuer = "https://login.microsoftonline.com/$TenantId/v2.0"
 
 function Invoke-Aws {
     param([string[]]$Argumentos, [switch]$PermitirFallo)
-    $salida = & aws @Argumentos --region $Region --output json 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        if ($PermitirFallo) { return $null }
-        throw "Fallo el comando: aws $($Argumentos -join ' ')`n$salida"
+
+    # Ver el comentario equivalente en 00-crear-ec2.ps1: en PowerShell 5.1 el
+    # stderr de un ejecutable nativo se convierte en error terminante bajo
+    # $ErrorActionPreference = 'Stop', incluso con codigo de salida 0.
+    $previo = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $salida = & aws @Argumentos --region $Region --output json 2>&1
+        $codigo = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previo
     }
-    if ([string]::IsNullOrWhiteSpace($salida)) { return $null }
-    return ($salida | Out-String | ConvertFrom-Json)
+
+    if ($codigo -ne 0) {
+        if ($PermitirFallo) { return $null }
+        throw "Fallo el comando: aws $($Argumentos -join ' ')`n$($salida | Out-String)"
+    }
+
+    $texto = ($salida | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($texto)) { return $null }
+    return ($texto | ConvertFrom-Json)
 }
+
+<#
+    PowerShell 5.1 elimina las comillas dobles al pasar un argumento a un
+    ejecutable nativo, asi que un JSON en linea le llega al AWS CLI como
+    {Audience:[...]} y lo rechaza por invalido. Escribirlo a un archivo y pasar
+    file://ruta evita el problema por completo: el CLI lee el JSON intacto.
+#>
+function New-ParametroJson {
+    param([string]$Json)
+    $ruta = Join-Path $env:TEMP ("apigw-" + [guid]::NewGuid().ToString("N") + ".json")
+    Set-Content -LiteralPath $ruta -Value $Json -Encoding ascii
+    $script:archivosTemporales += $ruta
+    return "file://" + ($ruta -replace '\\', '/')
+}
+
+$script:archivosTemporales = @()
 
 Write-Host ""
 Write-Host "=== Despliegue de AWS API Gateway (HTTP API) ===" -ForegroundColor Cyan
@@ -86,7 +116,7 @@ if ($api) {
                     '"AllowMethods":["GET","POST","PUT","DELETE","OPTIONS"],' +
                     '"AllowHeaders":["authorization","content-type"],' +
                     '"AllowCredentials":false,"MaxAge":3600}'
-        $argsCrear += @("--cors-configuration", $corsJson)
+        $argsCrear += @("--cors-configuration", (New-ParametroJson $corsJson))
     }
 
     $api = Invoke-Aws $argsCrear
@@ -119,7 +149,7 @@ if ($auth) {
         "--name", $nombreAuth,
         "--authorizer-type", "JWT",
         "--identity-source", '$request.header.Authorization',
-        "--jwt-configuration", $jwtConfigJson)
+        "--jwt-configuration", (New-ParametroJson $jwtConfigJson))
 
     $authorizerId = $auth.AuthorizerId
     Write-Host "[2/5] Authorizer creado: $authorizerId" -ForegroundColor Green
@@ -243,6 +273,10 @@ $resultado = [ordered]@{
     issuer        = $Issuer
     audience      = $Audience
     generado      = (Get-Date).ToString("s")
+}
+
+foreach ($tmp in $script:archivosTemporales) {
+    Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
 }
 
 $rutaSalida = Join-Path $PSScriptRoot "salida-despliegue.json"
