@@ -248,6 +248,28 @@ Aun así, para trabajo de curso **recomiendo repo privado** y agregar a tu compa
 
 ---
 
+### Repositorios del equipo
+
+| Componente | Repositorio | Responsable |
+| :--- | :--- | :--- |
+| AWS + microservicios + persistencia | https://github.com/VicenteJFV/pedidos360-ep1 (privado) | Vicente |
+| Frontend Angular + MSAL | https://github.com/Zerete/pedidos360_frontend (público) | Zerete |
+| BFF Spring Boot | por definir | Zerete |
+
+Los repositorios están separados a propósito: son responsabilidades distintas. El único punto donde se tocan es el despliegue — **el BFF se compila en la máquina de su autor y el JAR se copia a mi EC2**, porque el `user-data` instala `java-17-amazon-corretto-headless`, que es solo runtime y no trae `javac` ni Maven.
+
+```bash
+scp -i aws\pedidos360-key.pem bff-pedidos360.jar ec2-user@<IP>:/tmp/
+```
+
+```bash
+ssh -i aws\pedidos360-key.pem ec2-user@<IP> "sudo mv /tmp/bff-pedidos360.jar /opt/pedidos360/bin/ && sudo chown pedidos360:pedidos360 /opt/pedidos360/bin/bff-pedidos360.jar && sudo systemctl restart bff"
+```
+
+Si prefieren compilar en la instancia, hay que agregar `java-17-amazon-corretto-devel` y `maven` al `dnf install` de [aws/ec2-user-data.sh](aws/ec2-user-data.sh).
+
+---
+
 ## 6. Decisiones de diseño
 
 **Los microservicios no validan JWT.** La autenticación es del API Gateway y la autorización por rol es del BFF. Lo que impide llamarlos directamente es la red: escuchan en `127.0.0.1` (`server.address`) y sus puertos no están en el Security Group. Defensa en profundidad sin duplicar lógica de seguridad en tres capas.
