@@ -1,0 +1,18 @@
+# Normaliza los saltos de linea dentro del repositorio.
+* text=auto
+
+# CRITICO: el user-data de EC2 corre en Amazon Linux. Si git lo entrega con
+# CRLF, bash falla con "\r: command not found" y la instancia queda sin Java.
+*.sh text eol=lf
+
+# Los scripts de PowerShell se quedan con finales de Windows.
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Archivos que no deben tocarse nunca.
+*.jar binary
+*.pem binary
+*.p12 binary
+*.jks binary
+*.sso binary

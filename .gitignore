@@ -1,0 +1,64 @@
+# ---------------------------------------------------------------------------
+# Compilados
+# ---------------------------------------------------------------------------
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+
+# ---------------------------------------------------------------------------
+# SECRETOS Y CREDENCIALES - nunca deben llegar al repositorio
+# ---------------------------------------------------------------------------
+
+# Llaves SSH que genera aws/00-crear-ec2.ps1
+*.pem
+*.ppk
+
+# Wallet de Oracle Autonomous Database
+wallet/
+cwallet.sso
+ewallet.p12
+tnsnames.ora
+sqlnet.ora
+ojdbc.properties
+keystore.jks
+truststore.jks
+
+# Credenciales de AWS
+.aws/
+credentials
+
+# Variables de entorno con contrasenas
+.env
+.env.*
+entorno
+
+# Salida de los scripts: contiene IDs de la infraestructura desplegada
+aws/salida-despliegue.json
+
+# ---------------------------------------------------------------------------
+# Entornos de desarrollo
+# ---------------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# ---------------------------------------------------------------------------
+# Sistema operativo
+# ---------------------------------------------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+*.log
+logs/
