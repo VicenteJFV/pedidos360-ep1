@@ -18,25 +18,35 @@ pedidos360/
 | `mvn clean package` en ambos microservicios | **BUILD SUCCESS** |
 | Tests de catálogo (`ProductoServiceTest`, `StockServiceTest`) | **13/13 pasando** |
 | Tests de pedidos (`EstadoPedidoTest`, `PedidoServiceTest`) | **44/44 pasando** |
-| Sintaxis de los 5 scripts PowerShell | **OK** |
+| Arranque real de Tomcat y pruebas HTTP extremo a extremo | **26/26 pasando** |
+| Sintaxis de los 6 scripts PowerShell | **OK** |
 | JSON de la colección Postman | **válido** |
-| Arranque real de Tomcat y pruebas HTTP extremo a extremo | **no ejecutado** |
 | Scripts de AWS contra una cuenta real | **no ejecutados** |
 
-Los 57 tests se ejecutaron con JDK 17 y Maven portables y verifican la máquina de estados completa, la atomicidad del descuento de stock, la consolidación de líneas, el congelado de precios y el mapeo JPA contra H2.
+Los 57 tests de Maven verifican la máquina de estados, la atomicidad del descuento de stock, la consolidación de líneas, el congelado de precios y el mapeo JPA contra H2. Las 26 comprobaciones de [pruebas/verificar-local.ps1](pruebas/verificar-local.ps1) verifican lo que los tests no pueden: que Tomcat arranca, que la serialización JSON funciona, que la llamada pedidos → catálogo viaja por la red, y que los microservicios no son alcanzables fuera de loopback.
 
-Lo que queda sin verificar es el arranque HTTP — el entorno donde generé esto bloquea la creación de sockets, así que Tomcat no puede levantar — y todo lo que toca AWS, que necesita tus credenciales del lab. Ambas cosas las compruebas tú con los pasos de abajo.
+Lo único sin verificar es lo que toca AWS, que necesita credenciales del lab.
 
 ---
 
 ## 0. Instalar el toolchain
 
-```powershell
-winget install --id EclipseAdoptium.Temurin.17.JDK -e --accept-package-agreements --accept-source-agreements
-```
+**JDK 17 o superior.** El `pom` compila con `release 17`, así que un JDK 21 sirve igual:
 
 ```powershell
-winget install --id Apache.Maven -e ; winget install --id Amazon.AWSCLI -e
+winget install --id EclipseAdoptium.Temurin.21.JDK -e --accept-package-agreements --accept-source-agreements ; winget install --id Amazon.AWSCLI -e
+```
+
+**Maven no está en el repositorio de winget**, hay que instalarlo a mano. Sin permisos de administrador:
+
+```powershell
+mkdir C:\dev\tools -Force ; curl.exe -sSL -o C:\dev\tools\maven.zip https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.zip ; Expand-Archive C:\dev\tools\maven.zip -DestinationPath C:\dev\tools -Force ; del C:\dev\tools\maven.zip
+```
+
+Y agrégalo al `PATH` de tu usuario de forma permanente:
+
+```powershell
+$p = [Environment]::GetEnvironmentVariable('Path','User'); [Environment]::SetEnvironmentVariable('Path', $p.TrimEnd(';') + ';C:\dev\tools\apache-maven-3.9.9\bin', 'User')
 ```
 
 Cierra y vuelve a abrir PowerShell para que tome el `PATH`, y comprueba:
@@ -44,6 +54,16 @@ Cierra y vuelve a abrir PowerShell para que tome el `PATH`, y comprueba:
 ```bash
 java -version; mvn -v; aws --version
 ```
+
+### Política de ejecución de PowerShell
+
+Windows bloquea los `.ps1` por defecto (`Restricted`). Para poder correr los scripts de este repo:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+```
+
+No necesita administrador. `RemoteSigned` permite scripts locales como estos y sigue bloqueando los descargados sin firmar. Si prefieres no cambiar nada, usa `powershell -ExecutionPolicy Bypass -File .\script.ps1` en cada invocación.
 
 ---
 
