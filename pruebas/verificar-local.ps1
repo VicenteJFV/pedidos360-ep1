@@ -4,7 +4,7 @@
     de punta a punta, sin AWS, sin Entra ID y sin el BFF.
 
 .DESCRIPCION
-    Arranca catalogo (8082) y pedidos (8081), ejecuta ~19 comprobaciones sobre
+    Arranca catalogo (8082) y pedidos (8081), ejecuta 26 comprobaciones sobre
     la maquina de estados y el control de stock, imprime un resumen y apaga
     todo al terminar.
 
@@ -193,11 +193,21 @@ try {
     Comprobar "Aceptar reservo el stock" ($stockReservado -eq ($stockAntes - 3)) "reservado=$stockReservado esperado=$($stockAntes - 3)"
     Comprobar "Cancelar repone el stock" ($stockRepuesto -eq $stockAntes) "repuesto=$stockRepuesto esperado=$stockAntes"
 
+    # Cantidad dentro del tope por linea (999) pero muy por encima del stock:
+    # asi el rechazo viene de la regla de negocio y no de la validacion de entrada.
     $exceso = Invoke-Api POST "$urlPed/api/orders" @{
+        clienteEmail = "cliente@duoc.cl"
+        items        = @(@{ productoId = $idProducto; cantidad = 500 })
+    }
+    Comprobar "Stock insuficiente devuelve 409" ($exceso.Status -eq 409) "status=$($exceso.Status)"
+    Comprobar "El 409 explica que producto falto" ($exceso.Json.detalles -and ($exceso.Json.detalles -join ' ') -match 'SKU-001') "detalles=$($exceso.Json.detalles -join ' | ')"
+
+    # Por encima del tope por linea: esto SI debe ser 400, no 409.
+    $topeLinea = Invoke-Api POST "$urlPed/api/orders" @{
         clienteEmail = "cliente@duoc.cl"
         items        = @(@{ productoId = $idProducto; cantidad = 99999 })
     }
-    Comprobar "Stock insuficiente devuelve 409" ($exceso.Status -eq 409) "status=$($exceso.Status)"
+    Comprobar "Cantidad sobre el tope por linea devuelve 400" ($topeLinea.Status -eq 400) "status=$($topeLinea.Status)"
 
     $enumMalo = Invoke-Api GET "$urlPed/api/orders?estado=INVENTADO"
     Comprobar "Estado invalido en el filtro devuelve 400" ($enumMalo.Status -eq 400) "status=$($enumMalo.Status)"
