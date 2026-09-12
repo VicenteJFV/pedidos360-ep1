@@ -65,7 +65,7 @@ public class PedidoController {
         return ResponseEntity.created(ubicacion).body(creado);
     }
 
-    /** Descuenta stock en el catalogo. Rol esperado: Admin u Operador (lo valida el BFF). */
+    /** Descuenta stock en el catalogo. Rol esperado: Admin (lo valida el BFF). */
     @PutMapping("/{id}/accept")
     public PedidoResponse aceptar(@PathVariable Long id) {
         return servicio.aceptar(id);
