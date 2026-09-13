@@ -152,8 +152,8 @@ try {
     $trasCrear = Invoke-Api GET "$urlCat/api/catalog/$idProducto"
     Comprobar "Crear el pedido NO descuenta stock" ([int]$trasCrear.Json.stock -eq $stockInicial) "stock=$($trasCrear.Json.stock) esperado=$stockInicial"
 
-    $temprano = Invoke-Api PUT "$urlPed/api/orders/$idPedido/dispatch"
-    Comprobar "No se puede despachar sin aceptar (409)" ($temprano.Status -eq 409) "status=$($temprano.Status)"
+    $temprano = Invoke-Api PUT "$urlPed/api/orders/$idPedido/ship"
+    Comprobar "No se puede despachar sin aceptar (400, regla de negocio)" ($temprano.Status -eq 400) "status=$($temprano.Status)"
 
     $aceptado = Invoke-Api PUT "$urlPed/api/orders/$idPedido/accept"
     Comprobar "Aceptar pasa a ACEPTADO" ($aceptado.Json.estado -eq "ACEPTADO") "estado=$($aceptado.Json.estado)"
@@ -164,7 +164,7 @@ try {
     $prep = Invoke-Api PUT "$urlPed/api/orders/$idPedido/prepare"
     Comprobar "Preparar pasa a EN_PREPARACION" ($prep.Json.estado -eq "EN_PREPARACION") "estado=$($prep.Json.estado)"
 
-    $desp = Invoke-Api PUT "$urlPed/api/orders/$idPedido/dispatch"
+    $desp = Invoke-Api PUT "$urlPed/api/orders/$idPedido/ship"
     Comprobar "Despachar pasa a DESPACHADO" ($desp.Json.estado -eq "DESPACHADO") "estado=$($desp.Json.estado)"
 
     $ent = Invoke-Api PUT "$urlPed/api/orders/$idPedido/deliver"
@@ -172,7 +172,7 @@ try {
     Comprobar "ENTREGADO no admite mas transiciones" ($ent.Json.transicionesPermitidas.Count -eq 0) "transiciones=$($ent.Json.transicionesPermitidas -join ',')"
 
     $tarde = Invoke-Api PUT "$urlPed/api/orders/$idPedido/cancel" @{ motivo = "muy tarde" }
-    Comprobar "Cancelar un pedido entregado da 409" ($tarde.Status -eq 409) "status=$($tarde.Status)"
+    Comprobar "Cancelar un pedido entregado da 400" ($tarde.Status -eq 400) "status=$($tarde.Status)"
 
     Write-Host ""
     Write-Host "=== Reposicion de stock y limites ===" -ForegroundColor Cyan

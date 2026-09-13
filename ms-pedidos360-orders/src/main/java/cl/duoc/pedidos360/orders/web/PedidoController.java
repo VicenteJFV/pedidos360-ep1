@@ -76,7 +76,7 @@ public class PedidoController {
         return servicio.preparar(id);
     }
 
-    @PutMapping("/{id}/dispatch")
+    @PutMapping("/{id}/ship")
     public PedidoResponse despachar(@PathVariable Long id) {
         return servicio.despachar(id);
     }

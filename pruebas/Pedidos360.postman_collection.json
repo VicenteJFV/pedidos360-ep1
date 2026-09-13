@@ -303,15 +303,15 @@
           }
         },
         {
-          "name": "2. Despachar sin aceptar -> 409",
+          "name": "2. Despachar sin aceptar -> 400",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('La maquina de estados bloquea la transicion (409)', function () {",
-                  "    pm.response.to.have.status(409);",
+                  "pm.test('La maquina de estados bloquea la transicion (400)', function () {",
+                  "    pm.response.to.have.status(400);",
                   "});",
                   "pm.test('Explica cuales serian las transiciones validas', function () {",
                   "    pm.expect(pm.response.text()).to.include('CREADO');",
@@ -324,9 +324,9 @@
             "method": "PUT",
             "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
             "url": {
-              "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/dispatch",
+              "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/ship",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "orders", "{{pedidoId}}", "dispatch"]
+              "path": ["api", "orders", "{{pedidoId}}", "ship"]
             },
             "description": "Regla de negocio: no se puede despachar sin haber aceptado."
           }
@@ -404,9 +404,9 @@
             "method": "PUT",
             "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
             "url": {
-              "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/dispatch",
+              "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/ship",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "orders", "{{pedidoId}}", "dispatch"]
+              "path": ["api", "orders", "{{pedidoId}}", "ship"]
             }
           }
         },
@@ -440,15 +440,15 @@
           }
         },
         {
-          "name": "7. Cancelar un pedido ya entregado -> 409",
+          "name": "7. Cancelar un pedido ya entregado -> 400",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Estado final rechaza cambios (409)', function () {",
-                  "    pm.response.to.have.status(409);",
+                  "pm.test('Estado final rechaza cambios (400)', function () {",
+                  "    pm.response.to.have.status(400);",
                   "});"
                 ]
               }

@@ -4,6 +4,7 @@ import cl.duoc.pedidos360.orders.domain.EstadoPedido;
 import cl.duoc.pedidos360.orders.exception.CatalogoNoDisponibleException;
 import cl.duoc.pedidos360.orders.exception.RecursoNoEncontradoException;
 import cl.duoc.pedidos360.orders.exception.ReglaNegocioException;
+import cl.duoc.pedidos360.orders.exception.TransicionInvalidaException;
 import cl.duoc.pedidos360.orders.web.dto.ApiError;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -30,7 +31,27 @@ public class ManejadorGlobalErrores {
                 .body(ApiError.de(404, "Not Found", ex.getMessage(), req.getRequestURI()));
     }
 
-    /** Incluye TransicionInvalidaException, que hereda de esta. */
+    /**
+     * Transicion de estado no permitida -> 400.
+     *
+     * Semanticamente un 409 seria mas preciso: el pedido existe y la peticion
+     * esta bien formada, lo que falla es que choca con el estado actual del
+     * recurso. Se usa 400 porque la pauta de evaluacion lo exige de forma
+     * explicita en la matriz de pruebas:
+     *
+     *   PUT /api/orders/1/ship  con el pedido en un estado no apto  ->  400
+     *
+     * Este handler es mas especifico que el de ReglaNegocioException, asi que
+     * Spring lo elige para las transiciones invalidas y deja el 409 para el
+     * resto de conflictos de negocio (stock insuficiente, SKU duplicado).
+     */
+    @ExceptionHandler(TransicionInvalidaException.class)
+    public ResponseEntity<ApiError> transicionInvalida(TransicionInvalidaException ex, HttpServletRequest req) {
+        return ResponseEntity.badRequest()
+                .body(ApiError.de(400, "Bad Request", ex.getMessage(), req.getRequestURI(), ex.getDetalles()));
+    }
+
+    /** Resto de conflictos de negocio: stock insuficiente, SKU duplicado. */
     @ExceptionHandler(ReglaNegocioException.class)
     public ResponseEntity<ApiError> reglaNegocio(ReglaNegocioException ex, HttpServletRequest req) {
         return ResponseEntity.status(HttpStatus.CONFLICT)

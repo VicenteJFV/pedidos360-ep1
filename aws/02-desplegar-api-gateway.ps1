@@ -30,7 +30,12 @@ param(
     # Client ID del registro Pedidos360-BACKEND-API. Es el claim 'aud' esperado.
     [string]$Audience = "fc8de29a-f24d-4173-bfc1-12580819e4c7",
 
-    [string]$Stage = '$default',
+    # La pauta de evaluacion exige publicar en la etapa 'Desarrollo' y que el
+    # environment.ts del Angular apunte a .../Desarrollo. Importante: NO debe
+    # existir tambien un stage '$default'. Con ambos presentes, API Gateway no
+    # quita el prefijo de la ruta y busca '/Desarrollo/api/orders' como si fuera
+    # un route key, devolviendo 404 en todo.
+    [string]$Stage = 'Desarrollo',
 
     # Origenes permitidos para CORS cuando se usa -CorsEnGateway.
     [string[]]$OrigenesPermitidos = @("http://localhost:4200"),
@@ -165,7 +170,7 @@ $rutasFuncionales = @(
     @{ Metodo = "GET";    Ruta = "/api/orders/{id}" },
     @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/accept" },
     @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/prepare" },
-    @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/dispatch" },
+    @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/ship" },
     @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/deliver" },
     @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/cancel" },
     @{ Metodo = "GET";    Ruta = "/api/catalog" },
@@ -182,7 +187,7 @@ $rutasPreflight = @(
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/accept" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/prepare" },
-    @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/dispatch" },
+    @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/ship" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/deliver" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/cancel" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/catalog" },
