@@ -7,17 +7,21 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 
 import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Datos de demostracion. Solo se cargan en perfil dev (H2 en memoria); en Oracle
- * la tabla se mantiene entre reinicios y no queremos duplicar filas.
+ * Datos de demostracion del catalogo.
+ *
+ * Corre en cualquier perfil pero solo si la tabla esta vacia, asi que es
+ * idempotente: en H2 siembra en cada arranque porque la base es en memoria, y
+ * en Oracle siembra una unica vez y nunca vuelve a tocar los datos.
+ *
+ * Sin esto, al pasar a Oracle el catalogo arrancaria vacio y no se podria
+ * crear ningun pedido, porque no habria productos que referenciar.
  */
 @Configuration
-@Profile("dev")
 public class CargaDatosIniciales {
 
     private static final Logger log = LoggerFactory.getLogger(CargaDatosIniciales.class);
