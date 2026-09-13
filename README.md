@@ -7,9 +7,32 @@ pedidos360/
 ├── ms-pedidos360-orders/     Microservicio principal (8081) — pedidos y máquina de estados
 ├── ms-pedidos360-catalog/    Microservicio de catálogo (8082) — productos y stock
 ├── aws/                      Scripts de infraestructura y API Gateway
-├── pruebas/                  Obtención de token y colección Postman
-└── CONTRATO-EQUIPO.md        Lo que hay que coordinar con el compañero
+└── pruebas/                  Verificación local, token de Entra ID y colección Postman
 ```
+
+## Contrato de integración
+
+El BFF y el frontend Angular viven en repositorios aparte. El punto de contacto entre las tres piezas es este:
+
+| Componente | Dirección | Expuesto |
+| :--- | :--- | :--- |
+| AWS API Gateway | `https://xpglku1pj5.execute-api.us-east-1.amazonaws.com/Desarrollo` | público — único punto de entrada |
+| BFF | `http://<IP_EC2>:8080` | solo para el API Gateway |
+| `ms-pedidos360-orders` | `http://127.0.0.1:8081` | solo loopback |
+| `ms-pedidos360-catalog` | `http://127.0.0.1:8082` | solo loopback |
+
+El API Gateway valida el JWT de Entra ID (`issuer` + `audience`), el BFF valida firma, vigencia y **autorización por rol**, y los microservicios resuelven el dominio y la persistencia. Los microservicios no evalúan roles: no ven el token.
+
+### Códigos de estado del dominio
+
+| Código | Cuándo |
+| :--- | :--- |
+| `400` | Validación de entrada, y **transición de estado inválida** |
+| `404` | El pedido o producto no existe |
+| `409` | Stock insuficiente, SKU duplicado, conflicto de concurrencia |
+| `503` | El microservicio de catálogo no responde |
+
+La transición inválida devuelve `400` porque así lo exige la matriz de pruebas de la pauta (`PUT /api/orders/{id}/ship` con estado no apto). Semánticamente `409` sería más preciso —el recurso existe y la petición está bien formada, lo que falla es el estado— y así está documentado en `ManejadorGlobalErrores`.
 
 ## Estado de verificación
 
