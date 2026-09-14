@@ -227,23 +227,50 @@ if ($ConfigurarEc2) {
 
     # El archivo de entorno se reescribe por SSH. La contrasena viaja por el
     # tunel cifrado y queda en la instancia con permisos 600, nunca en disco local.
-    $remoto = @"
+    #
+    # La plantilla va en comillas simples para que PowerShell NO interprete
+    # nada: dentro hay sintaxis de bash con $ y $(...) que, en una cadena
+    # interpolada, PowerShell intentaria ejecutar en la maquina local. Los
+    # valores se inyectan despues con Replace, que no reinterpreta nada.
+    $plantilla = @'
+set -e
 sudo tee /opt/pedidos360/entorno > /dev/null <<'ENTORNO'
 SPRING_PROFILE=oracle
-ORACLE_JDBC_URL=$jdbc
-ORACLE_USER=$Usuario
-ORACLE_PASSWORD=$clave
+ORACLE_JDBC_URL=__JDBC__
+ORACLE_USER=__USUARIO__
+ORACLE_PASSWORD=__CLAVE__
 ENTORNO
 sudo chmod 600 /opt/pedidos360/entorno
 sudo chown pedidos360:pedidos360 /opt/pedidos360/entorno
+echo "Reiniciando el catalogo..."
 sudo systemctl restart ms-catalog
-sleep 30
+sleep 35
+echo "Reiniciando pedidos..."
 sudo systemctl restart ms-orders
-sleep 20
-for s in ms-catalog ms-orders bff; do printf '  %-12s %s\n' \$s \$(systemctl is-active \$s); done
-"@
+sleep 25
+echo ""
+echo "Estado de los servicios:"
+systemctl is-active ms-catalog ms-orders bff
+echo ""
+echo "Productos en el catalogo:"
+curl -s http://127.0.0.1:8082/api/catalog | head -c 300
+echo ""
+'@
 
-    $remoto | & ssh -o StrictHostKeyChecking=accept-new -i $RutaLlave "ec2-user@$IpEc2" 'bash -s'
+    $remoto = $plantilla.
+        Replace('__JDBC__',    $jdbc).
+        Replace('__USUARIO__', $Usuario).
+        Replace('__CLAVE__',   $clave)
+
+    $remoto | & ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 `
+        -i $RutaLlave "ec2-user@$IpEc2" "bash -s"
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "La configuracion remota fallo. Revisa los logs:" -ForegroundColor Red
+        Write-Host "  ssh -i `"$RutaLlave`" ec2-user@$IpEc2 'sudo tail -40 /opt/pedidos360/logs/catalog.log'" -ForegroundColor DarkGray
+        throw "Fallo la configuracion en la EC2."
+    }
 
     Write-Host ""
     Write-Host "      Listo. Verifica que los datos persistan:" -ForegroundColor Green
