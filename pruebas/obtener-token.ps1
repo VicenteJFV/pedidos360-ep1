@@ -30,15 +30,31 @@
 .EJEMPLO
     .\obtener-token.ps1 -CodigoDispositivo
 #>
-[CmdletBinding(DefaultParameterSetName = "Password")]
+[CmdletBinding(DefaultParameterSetName = "Pkce")]
 param(
-    [Parameter(ParameterSetName = "Password")]
+    <#
+        Authorization Code + PKCE. Es el modo recomendado y el que usa por
+        defecto, porque funciona con el registro tal como esta: al ser de tipo
+        SPA, Entra ID admite este flujo sin secreto de cliente y sin necesidad
+        de habilitar "Allow public client flows".
+
+        Ademas es exactamente el flujo que ejecuta el Angular con MSAL, asi que
+        el token que obtiene aqui es identico al que usara el navegador.
+    #>
+    [Parameter(ParameterSetName = "Pkce")]
+    [switch]$Pkce,
+
+    [Parameter(ParameterSetName = "Pkce")]
+    [string]$RedirectUri = "http://localhost:4200/",
+
+    # Resource Owner Password Credentials. Requiere "Allow public client flows".
+    [Parameter(Mandatory = $true, ParameterSetName = "Password")]
     [string]$Usuario,
 
     [Parameter(ParameterSetName = "Password")]
     [SecureString]$Password,
 
-    # Flujo device code: abre el navegador. Util si el tenant exige MFA.
+    # Device code. Tambien requiere "Allow public client flows".
     [Parameter(Mandatory = $true, ParameterSetName = "DeviceCode")]
     [switch]$CodigoDispositivo,
 
@@ -132,7 +148,114 @@ function Show-Diagnostico {
 
 # ---------------------------------------------------------------------------
 
-if ($PSCmdlet.ParameterSetName -eq "DeviceCode") {
+if ($PSCmdlet.ParameterSetName -eq "Pkce") {
+
+    # ---- PKCE: verifier aleatorio y su desafio SHA-256 en base64url ----
+    $bytes = New-Object byte[] 64
+    [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    $verifier = [Convert]::ToBase64String($bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $hash = $sha.ComputeHash([Text.Encoding]::ASCII.GetBytes($verifier))
+    $challenge = [Convert]::ToBase64String($hash).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+
+    $estado = [guid]::NewGuid().ToString("N")
+
+    $urlAutorizar = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/authorize" +
+        "?client_id=$ClientIdFrontend" +
+        "&response_type=code" +
+        "&redirect_uri=$([uri]::EscapeDataString($RedirectUri))" +
+        "&response_mode=query" +
+        "&scope=$([uri]::EscapeDataString("$scope openid profile offline_access"))" +
+        "&state=$estado" +
+        "&code_challenge=$challenge" +
+        "&code_challenge_method=S256" +
+        "&prompt=select_account"
+
+    # Se levanta un receptor en el redirect URI para capturar el 'code' sin que
+    # tengas que copiarlo de la barra de direcciones. Si el puerto esta ocupado
+    # (por ejemplo, con 'ng serve' corriendo), se pide pegar la URL a mano.
+    $listener = $null
+    try {
+        $listener = New-Object System.Net.HttpListener
+        $listener.Prefixes.Add($RedirectUri)
+        $listener.Start()
+    } catch {
+        $listener = $null
+    }
+
+    Write-Host ""
+    Write-Host "Abriendo el navegador para iniciar sesion..." -ForegroundColor Cyan
+    Write-Host "Usa una de las cuentas de prueba (Cliente@... o Admin@...)." -ForegroundColor DarkGray
+    Write-Host ""
+    Start-Process $urlAutorizar
+
+    $codigo = $null
+
+    if ($listener) {
+        Write-Host "Esperando la redireccion en $RedirectUri ..." -ForegroundColor Cyan
+        $contexto = $listener.GetContext()
+        $codigo = $contexto.Request.QueryString["code"]
+        $errorOauth = $contexto.Request.QueryString["error"]
+
+        $html = if ($codigo) {
+            "<html><body style='font-family:sans-serif;padding:3rem'><h2>Listo</h2><p>Ya puedes volver a la terminal.</p></body></html>"
+        } else {
+            "<html><body style='font-family:sans-serif;padding:3rem'><h2>Error</h2><p>$errorOauth</p></body></html>"
+        }
+        $buffer = [Text.Encoding]::UTF8.GetBytes($html)
+        $contexto.Response.ContentType = "text/html; charset=utf-8"
+        $contexto.Response.ContentLength64 = $buffer.Length
+        $contexto.Response.OutputStream.Write($buffer, 0, $buffer.Length)
+        $contexto.Response.Close()
+        $listener.Stop()
+
+        if (-not $codigo) { throw "Entra ID devolvio un error en la autorizacion: $errorOauth" }
+    } else {
+        Write-Host "No se pudo escuchar en $RedirectUri (puerto ocupado)." -ForegroundColor Yellow
+        Write-Host "Tras iniciar sesion el navegador quedara en una pagina de error: eso es normal." -ForegroundColor Yellow
+        Write-Host "Copia la URL COMPLETA de la barra de direcciones y pegala aqui." -ForegroundColor Yellow
+        Write-Host ""
+        $urlPegada = Read-Host "URL"
+        $m = [regex]::Match($urlPegada, 'code=([^&]+)')
+        if (-not $m.Success) { throw "No se encontro el parametro 'code' en la URL." }
+        $codigo = [uri]::UnescapeDataString($m.Groups[1].Value)
+    }
+
+    # ---- Canje del codigo por el token ----
+    # El encabezado Origin es obligatorio: para un registro de tipo SPA, Entra ID
+    # solo acepta el canje si viene como peticion de origen cruzado.
+    $origen = $RedirectUri.TrimEnd('/')
+    try {
+        $respuesta = Invoke-RestMethod -Method Post -Uri $urlToken `
+            -Headers @{ Origin = $origen } `
+            -Body @{
+                grant_type    = "authorization_code"
+                client_id     = $ClientIdFrontend
+                code          = $codigo
+                redirect_uri  = $RedirectUri
+                code_verifier = $verifier
+                scope         = "$scope openid profile offline_access"
+            }
+    } catch {
+        $detalle = $_.ErrorDetails.Message
+        Write-Host ""
+        Write-Host "Entra ID rechazo el canje del codigo:" -ForegroundColor Red
+        Write-Host $detalle -ForegroundColor DarkGray
+        Write-Host ""
+        if ($detalle -match "AADSTS9002326") {
+            Write-Host "AADSTS9002326: falta el encabezado Origin o el registro no es de tipo SPA." -ForegroundColor Yellow
+            Write-Host "Verifica que en Authentication exista la plataforma 'Single-page application'" -ForegroundColor Yellow
+            Write-Host "con el redirect URI $RedirectUri" -ForegroundColor Yellow
+        } elseif ($detalle -match "AADSTS50011") {
+            Write-Host "AADSTS50011: el redirect URI no coincide con ninguno registrado." -ForegroundColor Yellow
+        } elseif ($detalle -match "AADSTS65001") {
+            Write-Host "AADSTS65001: falta conceder el permiso delegado $scope a la SPA." -ForegroundColor Yellow
+        }
+        throw
+    }
+
+} elseif ($PSCmdlet.ParameterSetName -eq "DeviceCode") {
 
     $urlDevice = "https://login.microsoftonline.com/$TenantId/oauth2/v2.0/devicecode"
     $inicio = Invoke-RestMethod -Method Post -Uri $urlDevice -Body @{

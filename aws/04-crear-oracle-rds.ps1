@@ -208,9 +208,20 @@ Write-Host "      No es accesible desde Internet: solo responde a la EC2." -Fore
 # ---------------------------------------------------------------------------
 
 if ($ConfigurarEc2) {
-    if (-not $IpEc2)   { throw "Falta -IpEc2." }
-    if (-not $clave)   { throw "La instancia ya existia, asi que no tengo la contrasena. Vuelve a correr sin -ConfigurarEc2 y configura la EC2 a mano, o resetea la clave con 'aws rds modify-db-instance --master-user-password'." }
+    if (-not $IpEc2) { throw "Falta -IpEc2." }
     if (-not (Test-Path $RutaLlave)) { throw "No se encontro la llave $RutaLlave" }
+
+    # Si la instancia ya existia, el script no conoce la contrasena: se pide
+    # aqui. Nunca se guarda en disco local ni queda en el historial.
+    if (-not $clave) {
+        Write-Host ""
+        Write-Host "La base ya existia, asi que necesito la contrasena de '$Usuario'" -ForegroundColor Cyan
+        Write-Host "para escribirla en la EC2. Es la que definiste al crearla." -ForegroundColor DarkGray
+        $segura = Read-Host "Contrasena" -AsSecureString
+        $clave = [Runtime.InteropServices.Marshal]::PtrToStringBSTR(
+            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($segura))
+        if ([string]::IsNullOrWhiteSpace($clave)) { throw "Contrasena vacia." }
+    }
 
     Write-Host "[5/5] Configurando la EC2 y reiniciando los microservicios..." -ForegroundColor Cyan
 
