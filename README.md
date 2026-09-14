@@ -257,13 +257,17 @@ Crea el Security Group (solo `8080` al mundo, `22` a tu IP), el par de llaves y 
 .\02-desplegar-api-gateway.ps1 -DestinoBff "http://<IP_QUE_IMPRIMIO>:8080"
 ```
 
-Crea la HTTP API, el JWT Authorizer de Entra ID, las 13 rutas funcionales protegidas, las 9 rutas `OPTIONS` públicas y el stage con auto-deploy. Es idempotente: puedes volver a correrlo sin duplicar nada.
+Crea la HTTP API, el JWT Authorizer de Entra ID, las 8 rutas funcionales protegidas, las 6 rutas `OPTIONS` públicas y el stage con auto-deploy. Es idempotente: puedes volver a correrlo sin duplicar nada.
+
+Las 8 rutas son exactamente las que el frontend consume: `GET`/`POST /api/orders`, los cuatro cambios de estado (`accept`, `prepare`, `ship`, `deliver`) y `GET`/`POST /api/catalog`. Cada una tiene su `OPTIONS` salvo las que comparten ruta base.
 
 Al final imprime la **URL de invocación**, que es lo único que tu compañero necesita.
 
 ### En las sesiones siguientes
 
-La instancia arranca con otra IP. Un solo comando arregla las 22 integraciones:
+**No hace falta.** La instancia tiene una IP elástica (`32.194.66.142`), así que conserva su dirección entre sesiones del lab y el API Gateway nunca se toca.
+
+Si alguna vez se pierde la IP elástica, un solo comando reapunta las 14 integraciones:
 
 ```powershell
 .\03-actualizar-destino-bff.ps1 -DesdeInstancia i-0abc123def456
@@ -326,7 +330,7 @@ Córrelo antes de subir nada a AWS: depurar en tu máquina es mucho más rápido
 ### Token de Entra ID
 
 ```powershell
-cd pruebas; .\obtener-token.ps1 -Usuario "Cliente@luissantacruz2026.onmicrosoft.com"
+cd pruebas; .\obtener-token.ps1 -Cuenta "Cliente@luissantacruz2026.onmicrosoft.com"
 ```
 
 Pide el token, lo copia al portapapeles y **diagnostica si va a pasar el authorizer de AWS**: revisa `iss`, `aud` y `scp`, y si algo está mal te dice exactamente qué tiene que cambiar tu compañero en Entra ID.
@@ -341,7 +345,7 @@ Luego importa en Postman `Pedidos360.postman_collection.json` y `Pedidos360.post
 | Rol `Cliente` en `/accept` | 403 | BFF |
 | `GET /api/orders` con token válido | 200 + JSON | Flujo completo |
 
-La carpeta **Flujo de pedido** recorre la máquina de estados completa e incluye los dos casos de regla de negocio: despachar sin aceptar (409) y stock insuficiente (409).
+La carpeta **Flujo de pedido** recorre la máquina de estados completa e incluye los dos casos de regla de negocio: despachar sin aceptar (400, por la matriz de la pauta) y stock insuficiente (409).
 
 ---
 
@@ -383,7 +387,7 @@ git remote add origin https://github.com/<TU_USUARIO>/pedidos360-ep1.git ; git p
 
 En el repositorio quedan el Tenant ID y los dos Client ID de Entra ID. **No son secretos** — son identificadores públicos que el frontend expone igual en cada petición — así que un repo público no filtra nada peligroso. Lo que sí son secretos y por eso están en `.gitignore`: las llaves `.pem`, el wallet de Oracle, las credenciales de AWS y el archivo `entorno`.
 
-Aun así, para trabajo de curso **recomiendo repo privado** y agregar a tu compañero y al docente como colaboradores. Es un tenant de pruebas con cuentas de usuario reales, y no gana nada estando indexado por Google.
+Este repositorio quedó **público** para que el docente pueda revisarlo sin gestión de permisos, que es lo que pide la entrega. La alternativa —privado con el docente como colaborador— protege algo más, porque es un tenant de pruebas con cuentas reales y no gana nada estando indexado por Google. Se descartó solo porque depende de que el docente acepte la invitación a tiempo.
 
 ---
 
@@ -391,9 +395,11 @@ Aun así, para trabajo de curso **recomiendo repo privado** y agregar a tu compa
 
 | Componente | Repositorio | Responsable |
 | :--- | :--- | :--- |
-| AWS + microservicios + persistencia | https://github.com/VicenteJFV/pedidos360-ep1 (privado) | Vicente |
-| Frontend Angular + MSAL | https://github.com/Zerete/pedidos360_frontend (público) | Zerete |
-| BFF Spring Boot | por definir | Zerete |
+| AWS + microservicios + persistencia | https://github.com/VicenteJFV/pedidos360-ep1 | Vicente |
+| Frontend Angular + MSAL | https://github.com/Zerete/pedidos360_frontend | Zerete |
+| BFF Spring Boot | https://github.com/Zerete/pedidos360-bff | Zerete |
+
+Los tres son públicos, para que el docente pueda revisarlos sin gestión de permisos.
 
 Los repositorios están separados a propósito: son responsabilidades distintas. El único punto donde se tocan es el despliegue — **el BFF se compila en la máquina de su autor y el JAR se copia a mi EC2**, porque el `user-data` instala `java-17-amazon-corretto-headless`, que es solo runtime y no trae `javac` ni Maven.
 
