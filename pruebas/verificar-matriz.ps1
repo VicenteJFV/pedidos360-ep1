@@ -25,6 +25,9 @@ param(
     [string]$BaseUrl = "https://xpglku1pj5.execute-api.us-east-1.amazonaws.com/Desarrollo",
     [string]$OrigenCors = "http://localhost:4200",
 
+    # Para aislar en que capa se pierde el cuerpo de un error.
+    [string]$UrlBffDirecta = "http://32.194.66.142:8080",
+
     [string]$CuentaCliente = "Cliente@luissantacruz2026.onmicrosoft.com",
     [string]$CuentaAdmin   = "Admin@luissantacruz2026.onmicrosoft.com",
 
@@ -204,10 +207,42 @@ if ($nuevo.Status -ne 201) {
     Comprobar "No se puede despachar sin aceptar" ($r.Status -eq 400) "status=$($r.Status)"
 
     # El cuerpo del error importa tanto como el codigo: es lo que el Angular
-    # muestra al usuario. Si falla, se imprime crudo para saber que llego.
+    # muestra al usuario.
     $cuerpoUtil = ($r.Json.mensaje -match "no puede pasar")
     Comprobar "El cuerpo del error llega intacto hasta el cliente" $cuerpoUtil `
         "longitud=$($r.Texto.Length)  crudo=[$($r.Texto)]"
+
+    # Si el cuerpo llego vacio, se repite la llamada saltandose el API Gateway
+    # para saber en que capa se pierde. El puerto del BFF esta abierto, asi que
+    # se le puede preguntar directo.
+    if (-not $cuerpoUtil -and $UrlBffDirecta) {
+        Write-Host ""
+        Write-Host "  Aislando la capa: misma peticion directo al BFF..." -ForegroundColor Cyan
+        $p2 = Invoke-Api POST "/api/orders" -Token $TokenAdmin -Cuerpo @{
+            clienteEmail = $ad.preferred_username
+            items        = @(@{ productoId = $rc.Json[0].id; cantidad = 1 })
+        }
+        $directo = $null
+        try {
+            $directo = Invoke-WebRequest -Method PUT `
+                -Uri "$UrlBffDirecta/api/orders/$($p2.Json.id)/ship" `
+                -Headers @{ Authorization = "Bearer $TokenAdmin" } `
+                -UseBasicParsing -TimeoutSec 25
+        } catch {
+            $rr = $_.Exception.Response
+            if ($rr) {
+                $t = (New-Object System.IO.StreamReader($rr.GetResponseStream())).ReadToEnd()
+                Write-Host "    BFF directo  -> HTTP $([int]$rr.StatusCode)  longitud=$($t.Length)" -ForegroundColor Yellow
+                Write-Host "    cuerpo: [$t]" -ForegroundColor DarkGray
+                Write-Host ""
+                if ($t.Length -gt 0) {
+                    Write-Host "    CONCLUSION: el BFF si devuelve el cuerpo. Lo pierde el API Gateway." -ForegroundColor Yellow
+                } else {
+                    Write-Host "    CONCLUSION: el BFF devuelve el cuerpo vacio. El problema esta en el BFF." -ForegroundColor Yellow
+                }
+            }
+        }
+    }
 
     Write-Host ""
     Write-Host "=== Extra: flujo completo con Admin ===" -ForegroundColor Cyan
