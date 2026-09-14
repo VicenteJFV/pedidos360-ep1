@@ -47,7 +47,11 @@ param(
     # Tras crear la base, configura /opt/pedidos360/entorno y reinicia los
     # microservicios con el perfil oracle.
     [switch]$ConfigurarEc2,
+
+    # Opcional. Si se omite, se resuelve desde AWS buscando la instancia por su
+    # etiqueta Name: es menos propenso a errores que escribir la IP a mano.
     [string]$IpEc2,
+    [string]$NombreInstancia = "pedidos360-bff",
     [string]$RutaLlave = (Join-Path $PSScriptRoot "pedidos360-key.pem")
 )
 
@@ -208,8 +212,29 @@ Write-Host "      No es accesible desde Internet: solo responde a la EC2." -Fore
 # ---------------------------------------------------------------------------
 
 if ($ConfigurarEc2) {
-    if (-not $IpEc2) { throw "Falta -IpEc2." }
     if (-not (Test-Path $RutaLlave)) { throw "No se encontro la llave $RutaLlave" }
+
+    # La IP real se consulta siempre a AWS. Si el usuario paso una, se compara:
+    # una IP mal escrita solo se manifiesta como un timeout de SSH varios pasos
+    # despues, y eso es dificil de diagnosticar.
+    $desc = Invoke-Aws @("ec2", "describe-instances",
+        "--filters", "Name=tag:Name,Values=$NombreInstancia",
+                     "Name=instance-state-name,Values=running")
+
+    if (-not $desc.Reservations -or $desc.Reservations.Count -eq 0) {
+        throw "No hay ninguna instancia '$NombreInstancia' en estado running. Arrancala primero."
+    }
+    $ipReal = $desc.Reservations[0].Instances[0].PublicIpAddress
+
+    if (-not $IpEc2) {
+        $IpEc2 = $ipReal
+        Write-Host "      IP resuelta desde AWS: $IpEc2" -ForegroundColor DarkGray
+    } elseif ($IpEc2 -ne $ipReal) {
+        Write-Host ""
+        Write-Host "      La IP indicada ($IpEc2) no coincide con la de la instancia ($ipReal)." -ForegroundColor Yellow
+        Write-Host "      Se usara la real: $ipReal" -ForegroundColor Yellow
+        $IpEc2 = $ipReal
+    }
 
     # Si la instancia ya existia, el script no conoce la contrasena: se pide
     # aqui. Nunca se guarda en disco local ni queda en el historial.
