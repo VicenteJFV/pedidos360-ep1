@@ -70,7 +70,15 @@ function Invoke-Api {
             $texto = $lector.ReadToEnd()
         } catch { }
         $json = $null
-        if ($texto) { try { $json = $texto | ConvertFrom-Json } catch { } }
+        if ($texto) {
+            try {
+                $json = $texto | ConvertFrom-Json
+                # Si el proxy serializo el JSON como una cadena en vez de
+                # escribirlo crudo, el resultado es un string y hay que
+                # interpretarlo una segunda vez.
+                if ($json -is [string]) { $json = $json | ConvertFrom-Json }
+            } catch { }
+        }
         return @{ Status = [int]$resp.StatusCode; Json = $json; Headers = $resp.Headers; Texto = $texto }
     }
 }
@@ -194,7 +202,12 @@ if ($nuevo.Status -ne 201) {
     Write-Host "=== Escenario 5: regla de negocio -> 400 ===" -ForegroundColor Cyan
     $r = Invoke-Api PUT "/api/orders/$idPedido/ship" -Token $TokenAdmin
     Comprobar "No se puede despachar sin aceptar" ($r.Status -eq 400) "status=$($r.Status)"
-    Comprobar "El microservicio explica el motivo" ($r.Json.mensaje -match "no puede pasar") "mensaje=$($r.Json.mensaje)"
+
+    # El cuerpo del error importa tanto como el codigo: es lo que el Angular
+    # muestra al usuario. Si falla, se imprime crudo para saber que llego.
+    $cuerpoUtil = ($r.Json.mensaje -match "no puede pasar")
+    Comprobar "El cuerpo del error llega intacto hasta el cliente" $cuerpoUtil `
+        "longitud=$($r.Texto.Length)  crudo=[$($r.Texto)]"
 
     Write-Host ""
     Write-Host "=== Extra: flujo completo con Admin ===" -ForegroundColor Cyan
