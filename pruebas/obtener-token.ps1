@@ -63,7 +63,11 @@ param(
     [string]$ClientIdBackend = "fc8de29a-f24d-4173-bfc1-12580819e4c7",
 
     # Guarda el token en una variable de entorno de la sesion actual.
-    [string]$GuardarEnVariable
+    [string]$GuardarEnVariable,
+
+    # Emite unicamente el token, sin diagnostico ni mensajes, para que otro
+    # script pueda capturarlo con $t = .\obtener-token.ps1 -SoloToken
+    [switch]$SoloToken
 )
 
 $ErrorActionPreference = "Stop"
@@ -334,6 +338,13 @@ if ($PSCmdlet.ParameterSetName -eq "Pkce") {
 }
 
 $token = $respuesta.access_token
+
+# Modo silencioso: solo emite el token por la salida estandar, para que otro
+# script pueda capturarlo. Lo usa verificar-matriz.ps1.
+if ($SoloToken) {
+    Write-Output $token
+    return
+}
 
 Show-Diagnostico -Jwt $token
 
