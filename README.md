@@ -42,13 +42,29 @@ La transición inválida devuelve `400` porque así lo exige la matriz de prueba
 | Tests de catálogo (`ProductoServiceTest`, `StockServiceTest`) | **13/13 pasando** |
 | Tests de pedidos (`EstadoPedidoTest`, `PedidoServiceTest`) | **44/44 pasando** |
 | Arranque real de Tomcat y pruebas HTTP extremo a extremo | **26/26 pasando** |
-| Sintaxis de los 6 scripts PowerShell | **OK** |
+| Matriz de seguridad contra AWS con tokens reales de Entra ID | **19/19 pasando** |
+| Persistencia en Oracle verificada tras reiniciar los servicios | **OK** |
+| Sintaxis de los 7 scripts PowerShell | **OK** |
 | JSON de la colección Postman | **válido** |
-| Scripts de AWS contra una cuenta real | **no ejecutados** |
 
-Los 57 tests de Maven verifican la máquina de estados, la atomicidad del descuento de stock, la consolidación de líneas, el congelado de precios y el mapeo JPA contra H2. Las 26 comprobaciones de [pruebas/verificar-local.ps1](pruebas/verificar-local.ps1) verifican lo que los tests no pueden: que Tomcat arranca, que la serialización JSON funciona, que la llamada pedidos → catálogo viaja por la red, y que los microservicios no son alcanzables fuera de loopback.
+Los 57 tests de Maven verifican la máquina de estados, la atomicidad del descuento de stock, la consolidación de líneas, el congelado de precios y el mapeo JPA. Las 26 comprobaciones de [pruebas/verificar-local.ps1](pruebas/verificar-local.ps1) verifican lo que los tests no pueden: que Tomcat arranca, que la serialización JSON funciona, que la llamada pedidos → catálogo viaja por la red, y que los microservicios no son alcanzables fuera de loopback.
 
-Lo único sin verificar es lo que toca AWS, que necesita credenciales del lab.
+Las 19 comprobaciones de [pruebas/verificar-matriz.ps1](pruebas/verificar-matriz.ps1) recorren la cadena completa —Angular → API Gateway → BFF → microservicio → Oracle— con tokens reales obtenidos por Authorization Code + PKCE:
+
+| Escenario | Esperado | Resultado |
+| :--- | :---: | :---: |
+| Sin token | 401 | ✅ |
+| Token con firma inválida | 401 | ✅ |
+| Acceso permitido (rol `Cliente`) | 200 | ✅ |
+| Sin permiso de rol (`Cliente` sobre `/accept`) | 403 | ✅ |
+| Error de regla de negocio (`/ship` sin aceptar) | 400 | ✅ |
+| Preflight CORS sin token | 200 + cabeceras | ✅ |
+
+### Persistencia
+
+La base es **Oracle SE2 en Amazon RDS**, dentro de la misma VPC que la EC2 y sin acceso desde Internet: el Security Group solo admite el puerto 1521 desde el Security Group de la instancia. Se optó por RDS en lugar de Autonomous Database porque el registro en Oracle Cloud exige tarjeta de crédito; el motor, el driver `ojdbc11` y el dialecto de Hibernate son los mismos, y cambiar de una a otra es editar tres variables de entorno.
+
+Prueba de persistencia ejecutada sobre la instancia: se crea un pedido, se acepta (con el consiguiente descuento de stock), se reinician **ambos** microservicios y se verifica que el pedido, su estado y el stock descontado sobreviven, sin que los datos de demostración se dupliquen.
 
 ---
 
