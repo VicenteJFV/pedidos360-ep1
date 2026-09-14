@@ -167,31 +167,23 @@ if ($auth) {
 $rutasFuncionales = @(
     @{ Metodo = "GET";    Ruta = "/api/orders" },
     @{ Metodo = "POST";   Ruta = "/api/orders" },
-    @{ Metodo = "GET";    Ruta = "/api/orders/{id}" },
     @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/accept" },
     @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/prepare" },
     @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/ship" },
     @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/deliver" },
-    @{ Metodo = "PUT";    Ruta = "/api/orders/{id}/cancel" },
     @{ Metodo = "GET";    Ruta = "/api/catalog" },
-    @{ Metodo = "POST";   Ruta = "/api/catalog" },
-    @{ Metodo = "GET";    Ruta = "/api/catalog/{id}" },
-    @{ Metodo = "PUT";    Ruta = "/api/catalog/{id}" },
-    @{ Metodo = "DELETE"; Ruta = "/api/catalog/{id}" }
+    @{ Metodo = "POST";   Ruta = "/api/catalog" }
 )
 
 # Preflight. Sin JWT: el navegador no manda Authorization en el OPTIONS, asi que
 # protegerlas romperia CORS con un 401 antes de la peticion real.
 $rutasPreflight = @(
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders" },
-    @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/accept" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/prepare" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/ship" },
     @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/deliver" },
-    @{ Metodo = "OPTIONS"; Ruta = "/api/orders/{id}/cancel" },
-    @{ Metodo = "OPTIONS"; Ruta = "/api/catalog" },
-    @{ Metodo = "OPTIONS"; Ruta = "/api/catalog/{id}" }
+    @{ Metodo = "OPTIONS"; Ruta = "/api/catalog" }
 )
 
 $rutasExistentes = (Invoke-Aws @("apigatewayv2", "get-routes", "--api-id", $apiId, "--max-results", "500")).Items
