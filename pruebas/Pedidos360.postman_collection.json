@@ -1,153 +1,31 @@
 {
   "info": {
-    "name": "Pedidos360 - EP1 DSY1107",
-    "description": "Matriz de validacion de seguridad (401/403/200) y flujo funcional completo a traves de AWS API Gateway.\n\nAntes de correr:\n1. Ejecuta pruebas/obtener-token.ps1 con la cuenta Cliente y pega el token en la variable tokenCliente del environment.\n2. Repite con la cuenta Admin y pega el token en tokenAdmin.\n3. Ajusta baseUrl con la URL de invocacion que imprime aws/02-desplegar-api-gateway.ps1.\n\nLa carpeta 'Matriz de seguridad' es la que se defiende en la EP1. Se puede correr completa con el Collection Runner.",
+    "name": "Pedidos360 - Matriz de seguridad EP1",
+    "description": "Colección lista para ejecutar con el Collection Runner durante la defensa.\n\nANTES DE CORRER:\n1. Importa también Pedidos360.postman_environment.json y selecciónalo arriba a la derecha.\n2. Obtén los dos tokens con: pruebas\\obtener-token.ps1 -Cuenta Cliente@... (y luego Admin@...)\n3. Pega cada uno en las variables tokenCliente y tokenAdmin del environment.\n\nLas carpetas están ordenadas para ejecutarse de arriba hacia abajo: la primera captura los ids que usan las siguientes.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "pedidoId", "value": "" },
-    { "key": "productoId", "value": "1" }
+    { "key": "productoId", "value": "" },
+    { "key": "pedidoId", "value": "" }
   ],
   "item": [
     {
-      "name": "Matriz de seguridad",
-      "description": "Los cinco escenarios del Paso 4 de la guia.",
+      "name": "0. Preparación",
       "item": [
         {
-          "name": "01 - Sin token -> 401",
+          "name": "Leer catálogo desde Oracle",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('API Gateway rechaza sin token (401)', function () {",
-                  "    pm.response.to.have.status(401);",
-                  "});",
-                  "",
-                  "pm.test('El rechazo viene de API Gateway, no del BFF', function () {",
-                  "    // API Gateway responde {\"message\":\"Unauthorized\"} y agrega www-authenticate.",
-                  "    // Si el cuerpo trae un JSON de Spring, el authorizer NO esta actuando.",
-                  "    var texto = pm.response.text();",
-                  "    pm.expect(texto).to.include('Unauthorized');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] },
-            "description": "Componente que valida: AWS API Gateway (JWT Authorizer)."
-          }
-        },
-        {
-          "name": "02 - Token invalido -> 401",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Firma invalida rechazada (401)', function () {",
-                  "    pm.response.to.have.status(401);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmYWxzbyIsImV4cCI6MTAwMDAwMDAwMH0.firma_totalmente_invalida"
-              }
-            ],
-            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] },
-            "description": "Token con firma que no corresponde a las claves de Entra ID."
-          }
-        },
-        {
-          "name": "03 - Preflight CORS sin token -> 200",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('El preflight NO exige token', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
-                  "});",
-                  "",
-                  "pm.test('Devuelve encabezados CORS', function () {",
-                  "    var permitido = pm.response.headers.get('Access-Control-Allow-Origin');",
-                  "    pm.expect(permitido, 'falta Access-Control-Allow-Origin').to.not.be.null;",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "OPTIONS",
-            "header": [
-              { "key": "Origin", "value": "http://localhost:4200" },
-              { "key": "Access-Control-Request-Method", "value": "GET" },
-              { "key": "Access-Control-Request-Headers", "value": "authorization,content-type" }
-            ],
-            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] },
-            "description": "Si esto devuelve 401, la ruta OPTIONS tiene el JWT Authorizer puesto por error."
-          }
-        },
-        {
-          "name": "04 - Rol Cliente en operacion de Admin -> 403",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('El BFF rechaza por rol insuficiente (403)', function () {",
-                  "    pm.response.to.have.status(403);",
-                  "});",
-                  "",
-                  "pm.test('No es 401: el token es valido, lo que falla es la autorizacion', function () {",
-                  "    pm.expect(pm.response.code).to.not.eql(401);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{tokenCliente}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/accept",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "orders", "{{pedidoId}}", "accept"]
-            },
-            "description": "Componente que valida: BFF (Spring Security evalua el claim 'roles')."
-          }
-        },
-        {
-          "name": "05 - Operacion permitida -> 200",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Flujo completo responde 200', function () {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "pm.test('Devuelve un arreglo JSON', function () {",
-                  "    pm.expect(pm.response.json()).to.be.an('array');",
-                  "});"
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const productos = pm.response.json();",
+                  "pm.test('Hay productos cargados en Oracle', () => pm.expect(productos.length).to.be.above(0));",
+                  "const disponible = productos.find(p => p.activo && p.stock > 5) || productos[0];",
+                  "pm.collectionVariables.set('productoId', disponible.id);",
+                  "console.log('Producto elegido:', disponible.sku, '| stock actual:', disponible.stock);"
                 ]
               }
             }
@@ -155,48 +33,23 @@
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{tokenCliente}}" }],
-            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] },
-            "description": "Recorrido completo: API Gateway -> BFF -> ms-orders -> Oracle."
-          }
-        }
-      ]
-    },
-    {
-      "name": "Catalogo",
-      "item": [
-        {
-          "name": "Listar productos",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
-                  "var productos = pm.response.json();",
-                  "if (Array.isArray(productos) && productos.length > 0) {",
-                  "    pm.collectionVariables.set('productoId', productos[0].id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [{ "key": "Authorization", "value": "Bearer {{tokenCliente}}" }],
-            "url": { "raw": "{{baseUrl}}/api/catalog", "host": ["{{baseUrl}}"], "path": ["api", "catalog"] }
+            "url": { "raw": "{{baseUrl}}/api/catalog", "host": ["{{baseUrl}}"], "path": ["api", "catalog"] },
+            "description": "Recorre toda la cadena: API Gateway → BFF → ms-catalog → Oracle."
           }
         },
         {
-          "name": "Crear producto (Admin)",
+          "name": "Crear pedido de prueba (Admin)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
-                  "pm.collectionVariables.set('productoId', pm.response.json().id);"
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const pedido = pm.response.json();",
+                  "pm.collectionVariables.set('pedidoId', pedido.id);",
+                  "pm.test('Nace en estado CREADO', () => pm.expect(pedido.estado).to.eql('CREADO'));",
+                  "console.log('Pedido creado:', pedido.codigo);"
                 ]
               }
             }
@@ -209,112 +62,124 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sku\": \"SKU-DEMO-01\",\n  \"nombre\": \"Producto de demostracion EP1\",\n  \"descripcion\": \"Creado desde Postman durante la defensa\",\n  \"precio\": 19990.00,\n  \"stock\": 10,\n  \"categoria\": \"DEMO\",\n  \"activo\": true\n}"
+              "raw": "{\n  \"clienteEmail\": \"Admin@luissantacruz2026.onmicrosoft.com\",\n  \"clienteNombre\": \"Demostracion EP1\",\n  \"direccionEntrega\": \"Duoc UC\",\n  \"items\": [\n    { \"productoId\": {{productoId}}, \"cantidad\": 1 }\n  ]\n}"
             },
-            "url": { "raw": "{{baseUrl}}/api/catalog", "host": ["{{baseUrl}}"], "path": ["api", "catalog"] }
+            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] }
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "1. Matriz de seguridad (pauta §6)",
+      "description": "Los cinco escenarios que exige la pauta, más el preflight CORS.",
+      "item": [
         {
-          "name": "Obtener producto",
+          "name": "Sin token → 401 (rechaza API Gateway)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": ["pm.test('200 OK', function () { pm.response.to.have.status(200); });"]
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('El rechazo viene del Gateway, no del BFF', () => {",
+                  "    pm.expect(pm.response.text()).to.include('Unauthorized');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] },
+            "description": "El JWT Authorizer rechaza en el borde. La petición nunca llega al BFF."
+          }
+        },
+        {
+          "name": "Token inválido → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmYWxzbyJ9.firma_que_no_corresponde" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] },
+            "description": "Firma que no corresponde a las claves públicas de Entra ID."
+          }
+        },
+        {
+          "name": "Acceso permitido (Cliente) → 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Devuelve datos reales desde Oracle', () => {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ]
               }
             }
           ],
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{tokenCliente}}" }],
-            "url": {
-              "raw": "{{baseUrl}}/api/catalog/{{productoId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "catalog", "{{productoId}}"]
-            }
+            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] },
+            "description": "Atraviesa las cinco capas: Gateway → BFF → ms-orders → Oracle."
           }
         },
         {
-          "name": "Desactivar producto (Admin)",
+          "name": "Rol sin permiso (Cliente en /accept) → 403",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
-                  "pm.test('Queda inactivo', function () {",
-                  "    pm.expect(pm.response.json().activo).to.eql(false);",
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('No es 401: el token es válido, falla la autorización', () => {",
+                  "    pm.expect(pm.response.code).to.not.eql(401);",
                   "});"
                 ]
               }
             }
           ],
           "request": {
-            "method": "DELETE",
-            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenCliente}}" }],
             "url": {
-              "raw": "{{baseUrl}}/api/catalog/{{productoId}}",
+              "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/accept",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "catalog", "{{productoId}}"]
+              "path": ["api", "orders", "{{pedidoId}}", "accept"]
             },
-            "description": "Baja logica: el producto no se borra, se marca inactivo."
-          }
-        }
-      ]
-    },
-    {
-      "name": "Flujo de pedido",
-      "description": "Recorrido completo de la maquina de estados y las reglas de negocio.",
-      "item": [
-        {
-          "name": "1. Crear pedido",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('201 Created', function () { pm.response.to.have.status(201); });",
-                  "var pedido = pm.response.json();",
-                  "pm.collectionVariables.set('pedidoId', pedido.id);",
-                  "pm.test('Nace en estado CREADO', function () {",
-                  "    pm.expect(pedido.estado).to.eql('CREADO');",
-                  "});",
-                  "pm.test('Calcula el total', function () {",
-                  "    pm.expect(Number(pedido.total)).to.be.above(0);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{tokenCliente}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"clienteEmail\": \"Cliente@luissantacruz2026.onmicrosoft.com\",\n  \"clienteNombre\": \"Cliente de prueba\",\n  \"direccionEntrega\": \"Av. Siempre Viva 742, Santiago\",\n  \"items\": [\n    { \"productoId\": {{productoId}}, \"cantidad\": 2 }\n  ]\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] }
+            "description": "El Gateway deja pasar el token porque es válido. Quien rechaza es el BFF, con @PreAuthorize sobre el claim roles."
           }
         },
         {
-          "name": "2. Despachar sin aceptar -> 400",
+          "name": "Regla de negocio (/ship sin aceptar) → 400",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('La maquina de estados bloquea la transicion (400)', function () {",
-                  "    pm.response.to.have.status(400);",
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('El microservicio explica el motivo', () => {",
+                  "    pm.expect(pm.response.json().mensaje).to.include('no puede pasar');",
                   "});",
-                  "pm.test('Explica cuales serian las transiciones validas', function () {",
-                  "    pm.expect(pm.response.text()).to.include('CREADO');",
+                  "pm.test('Indica las transiciones válidas', () => {",
+                  "    pm.expect(pm.response.json().detalles[0]).to.include('ACEPTADO');",
                   "});"
                 ]
               }
@@ -328,21 +193,52 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "orders", "{{pedidoId}}", "ship"]
             },
-            "description": "Regla de negocio: no se puede despachar sin haber aceptado."
+            "description": "La máquina de estados del microservicio impide despachar sin aceptar. Rol correcto, operación inválida."
           }
         },
         {
-          "name": "3. Aceptar (descuenta stock)",
+          "name": "Preflight CORS sin token → 200",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('200 OK', function () { pm.response.to.have.status(200); });",
-                  "pm.test('Pasa a ACEPTADO', function () {",
-                  "    pm.expect(pm.response.json().estado).to.eql('ACEPTADO');",
+                  "pm.test('No exige token', () => pm.expect(pm.response.code).to.be.oneOf([200, 204]));",
+                  "pm.test('Devuelve Access-Control-Allow-Origin', () => {",
+                  "    pm.expect(pm.response.headers.get('Access-Control-Allow-Origin')).to.not.be.null;",
                   "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "OPTIONS",
+            "header": [
+              { "key": "Origin", "value": "http://localhost:4200" },
+              { "key": "Access-Control-Request-Method", "value": "GET" },
+              { "key": "Access-Control-Request-Headers", "value": "authorization" }
+            ],
+            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] },
+            "description": "El navegador no envía Authorization en el preflight. Si esta ruta llevara authorizer, CORS se rompería con un 401."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Máquina de estados (Admin)",
+      "description": "Recorrido completo. Cada transición descuenta o valida según corresponda.",
+      "item": [
+        {
+          "name": "accept → ACEPTADO (descuenta stock)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Estado ACEPTADO', () => pm.expect(pm.response.json().estado).to.eql('ACEPTADO'));"
                 ]
               }
             }
@@ -355,18 +251,18 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "orders", "{{pedidoId}}", "accept"]
             },
-            "description": "Unica transicion que llama al catalogo para descontar stock."
+            "description": "Única transición que llama al microservicio de catálogo para descontar stock."
           }
         },
         {
-          "name": "4. Preparar",
+          "name": "prepare → EN_PREPARACION",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Pasa a EN_PREPARACION', function () {",
+                  "pm.test('Estado EN_PREPARACION', () => {",
                   "    pm.response.to.have.status(200);",
                   "    pm.expect(pm.response.json().estado).to.eql('EN_PREPARACION');",
                   "});"
@@ -385,14 +281,14 @@
           }
         },
         {
-          "name": "5. Despachar",
+          "name": "ship → DESPACHADO",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Pasa a DESPACHADO', function () {",
+                  "pm.test('Estado DESPACHADO', () => {",
                   "    pm.response.to.have.status(200);",
                   "    pm.expect(pm.response.json().estado).to.eql('DESPACHADO');",
                   "});"
@@ -407,22 +303,23 @@
               "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/ship",
               "host": ["{{baseUrl}}"],
               "path": ["api", "orders", "{{pedidoId}}", "ship"]
-            }
+            },
+            "description": "Ahora sí funciona: el pedido está en EN_PREPARACION. Es la misma petición que antes daba 400."
           }
         },
         {
-          "name": "6. Entregar",
+          "name": "deliver → ENTREGADO",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Pasa a ENTREGADO', function () {",
+                  "pm.test('Estado ENTREGADO', () => {",
                   "    pm.response.to.have.status(200);",
                   "    pm.expect(pm.response.json().estado).to.eql('ENTREGADO');",
                   "});",
-                  "pm.test('ENTREGADO es estado final', function () {",
+                  "pm.test('ENTREGADO es estado final', () => {",
                   "    pm.expect(pm.response.json().transicionesPermitidas).to.be.an('array').that.is.empty;",
                   "});"
                 ]
@@ -440,63 +337,26 @@
           }
         },
         {
-          "name": "7. Cancelar un pedido ya entregado -> 400",
+          "name": "Verificar stock descontado",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Estado final rechaza cambios (400)', function () {",
-                  "    pm.response.to.have.status(400);",
-                  "});"
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const p = pm.response.json().find(x => x.id === Number(pm.collectionVariables.get('productoId')));",
+                  "console.log('Stock final de', p.sku, ':', p.stock);",
+                  "pm.test('El producto sigue existiendo en Oracle', () => pm.expect(p).to.not.be.undefined);"
                 ]
               }
             }
           ],
           "request": {
-            "method": "PUT",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{tokenAdmin}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{ \"motivo\": \"Intento invalido de cancelacion\" }" },
-            "url": {
-              "raw": "{{baseUrl}}/api/orders/{{pedidoId}}/cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "orders", "{{pedidoId}}", "cancel"]
-            }
-          }
-        },
-        {
-          "name": "8. Stock insuficiente -> 409",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('El catalogo bloquea por falta de stock (409)', function () {",
-                  "    pm.response.to.have.status(409);",
-                  "});",
-                  "pm.test('Detalla que producto falto', function () {",
-                  "    pm.expect(pm.response.text().toLowerCase()).to.include('stock');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{tokenCliente}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"clienteEmail\": \"Cliente@luissantacruz2026.onmicrosoft.com\",\n  \"items\": [\n    { \"productoId\": {{productoId}}, \"cantidad\": 999 }\n  ]\n}"
-            },
-            "url": { "raw": "{{baseUrl}}/api/orders", "host": ["{{baseUrl}}"], "path": ["api", "orders"] }
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{tokenAdmin}}" }],
+            "url": { "raw": "{{baseUrl}}/api/catalog", "host": ["{{baseUrl}}"], "path": ["api", "catalog"] },
+            "description": "Compara el stock con el que imprimió la consola en el primer paso: bajó por la llamada entre microservicios."
           }
         }
       ]
