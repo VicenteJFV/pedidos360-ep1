@@ -25,8 +25,6 @@ param(
     [string]$BaseUrl = "https://xpglku1pj5.execute-api.us-east-1.amazonaws.com/Desarrollo",
     [string]$OrigenCors = "http://localhost:4200",
 
-    # Para aislar en que capa se pierde el cuerpo de un error.
-    [string]$UrlBffDirecta = "http://32.194.66.142:8080",
 
     [string]$CuentaCliente = "Cliente@luissantacruz2026.onmicrosoft.com",
     [string]$CuentaAdmin   = "Admin@luissantacruz2026.onmicrosoft.com",
@@ -67,11 +65,23 @@ function Invoke-Api {
     } catch {
         $resp = $_.Exception.Response
         if (-not $resp) { return @{ Status = 0; Json = $null; Texto = $_.Exception.Message } }
+
+        # PowerShell 5.1 consume y cierra el stream de la respuesta antes de
+        # lanzar la excepcion, asi que GetResponseStream() devuelve vacio y
+        # parece que el servidor no envio cuerpo. El contenido real queda en
+        # ErrorDetails.Message; el stream solo sirve como respaldo para
+        # PowerShell 7, donde ErrorDetails a veces viene nulo.
         $texto = ""
-        try {
-            $lector = New-Object System.IO.StreamReader($resp.GetResponseStream())
-            $texto = $lector.ReadToEnd()
-        } catch { }
+        if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+            $texto = $_.ErrorDetails.Message
+        } else {
+            try {
+                $flujo = $resp.GetResponseStream()
+                if ($flujo -and $flujo.CanRead) {
+                    $texto = (New-Object System.IO.StreamReader($flujo)).ReadToEnd()
+                }
+            } catch { }
+        }
         $json = $null
         if ($texto) {
             try {
@@ -212,59 +222,6 @@ if ($nuevo.Status -ne 201) {
     Comprobar "El cuerpo del error llega intacto hasta el cliente" $cuerpoUtil `
         "longitud=$($r.Texto.Length)  crudo=[$($r.Texto)]"
 
-    # Diagnostico: se comparan tres errores distintos que atraviesan el MISMO
-    # bloque catch del BFF. Tomcat solo cierra la conexion en el 400, asi que
-    # si los otros si traen cuerpo, la causa es el cierre y no el codigo del BFF.
-    if (-not $cuerpoUtil) {
-        Write-Host ""
-        Write-Host "  Comparando distintos codigos de error por el mismo camino:" -ForegroundColor Cyan
-
-        $sondas = @(
-            @{ Nombre = "404 producto inexistente"; Cuerpo = @{ clienteEmail = "x@duoc.cl"; items = @(@{ productoId = 999999; cantidad = 1 }) } },
-            @{ Nombre = "409 stock insuficiente  "; Cuerpo = @{ clienteEmail = "x@duoc.cl"; items = @(@{ productoId = $rc.Json[0].id; cantidad = 900 }) } },
-            @{ Nombre = "400 validacion de entrada"; Cuerpo = @{ clienteEmail = "no-es-un-correo"; items = @() } }
-        )
-        foreach ($s in $sondas) {
-            $x = Invoke-Api POST "/api/orders" -Token $TokenAdmin -Cuerpo $s.Cuerpo
-            $vista = if ($x.Texto.Length -gt 70) { $x.Texto.Substring(0, 70) + "..." } else { $x.Texto }
-            Write-Host ("    {0}  HTTP {1}  longitud={2}  {3}" -f $s.Nombre, $x.Status, $x.Texto.Length, $vista) -ForegroundColor DarkGray
-        }
-        Write-Host ""
-        Write-Host "    Si los 404/409 traen cuerpo y los 400 no, la causa es el cierre de" -ForegroundColor Yellow
-        Write-Host "    conexion que Tomcat aplica al 400, no el codigo del BFF." -ForegroundColor Yellow
-    }
-
-    # Si el cuerpo llego vacio, se repite la llamada saltandose el API Gateway
-    # para saber en que capa se pierde. El puerto del BFF esta abierto, asi que
-    # se le puede preguntar directo.
-    if (-not $cuerpoUtil -and $UrlBffDirecta) {
-        Write-Host ""
-        Write-Host "  Aislando la capa: misma peticion directo al BFF..." -ForegroundColor Cyan
-        $p2 = Invoke-Api POST "/api/orders" -Token $TokenAdmin -Cuerpo @{
-            clienteEmail = $ad.preferred_username
-            items        = @(@{ productoId = $rc.Json[0].id; cantidad = 1 })
-        }
-        $directo = $null
-        try {
-            $directo = Invoke-WebRequest -Method PUT `
-                -Uri "$UrlBffDirecta/api/orders/$($p2.Json.id)/ship" `
-                -Headers @{ Authorization = "Bearer $TokenAdmin" } `
-                -UseBasicParsing -TimeoutSec 25
-        } catch {
-            $rr = $_.Exception.Response
-            if ($rr) {
-                $t = (New-Object System.IO.StreamReader($rr.GetResponseStream())).ReadToEnd()
-                Write-Host "    BFF directo  -> HTTP $([int]$rr.StatusCode)  longitud=$($t.Length)" -ForegroundColor Yellow
-                Write-Host "    cuerpo: [$t]" -ForegroundColor DarkGray
-                Write-Host ""
-                if ($t.Length -gt 0) {
-                    Write-Host "    CONCLUSION: el BFF si devuelve el cuerpo. Lo pierde el API Gateway." -ForegroundColor Yellow
-                } else {
-                    Write-Host "    CONCLUSION: el BFF devuelve el cuerpo vacio. El problema esta en el BFF." -ForegroundColor Yellow
-                }
-            }
-        }
-    }
 
     Write-Host ""
     Write-Host "=== Extra: flujo completo con Admin ===" -ForegroundColor Cyan
