@@ -25,6 +25,9 @@ param(
     [string]$BaseUrl = "https://xpglku1pj5.execute-api.us-east-1.amazonaws.com/Desarrollo",
     [string]$OrigenCors = "http://localhost:4200",
 
+    [string]$CuentaCliente = "Cliente@luissantacruz2026.onmicrosoft.com",
+    [string]$CuentaAdmin   = "Admin@luissantacruz2026.onmicrosoft.com",
+
     # Permite reutilizar tokens ya obtenidos y saltarse los logins.
     [string]$TokenCliente,
     [string]$TokenAdmin
@@ -101,13 +104,14 @@ Write-Host ""
 $obtener = Join-Path $PSScriptRoot "obtener-token.ps1"
 
 if (-not $TokenCliente) {
-    Write-Host "Inicia sesion con la cuenta CLIENTE en el navegador..." -ForegroundColor Cyan
-    $TokenCliente = & $obtener -SoloToken
+    Write-Host "Inicia sesion con $CuentaCliente ..." -ForegroundColor Cyan
+    $TokenCliente = & $obtener -SoloToken -Cuenta $CuentaCliente
 }
 if (-not $TokenAdmin) {
     Write-Host ""
-    Write-Host "Ahora inicia sesion con la cuenta ADMIN..." -ForegroundColor Cyan
-    $TokenAdmin = & $obtener -SoloToken
+    Write-Host "Ahora inicia sesion con $CuentaAdmin ..." -ForegroundColor Cyan
+    Write-Host "Te va a pedir la contrasena: es a proposito, para forzar el cambio de cuenta." -ForegroundColor DarkGray
+    $TokenAdmin = & $obtener -SoloToken -Cuenta $CuentaAdmin
 }
 
 # ---------------------------------------------------------------------------
@@ -124,6 +128,19 @@ foreach ($par in @(@{N = "Cliente"; C = $cl }, @{N = "Admin"; C = $ad })) {
     $c = $par.C
     Write-Host ("  {0,-8} upn={1}  roles={2}" -f $par.N, $c.preferred_username,
         $(if ($c.roles) { $c.roles -join "," } else { "(ninguno)" }))
+}
+
+# Si el navegador reutilizo la sesion, los dos tokens serian de la misma cuenta
+# y todo lo que sigue daria 403 sin que eso signifique nada. Mejor cortar aqui.
+if ($cl.preferred_username -eq $ad.preferred_username) {
+    Write-Host ""
+    Write-Host "  Los dos tokens son de la MISMA cuenta ($($cl.preferred_username))." -ForegroundColor Red
+    Write-Host "  Entra ID reutilizo la sesion del navegador." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Cierra sesion en https://login.microsoftonline.com/logout y reintenta," -ForegroundColor Yellow
+    Write-Host "  o corre el script desde una ventana de incognito." -ForegroundColor Yellow
+    Write-Host ""
+    throw "No se pudo obtener un token por cada cuenta."
 }
 
 $issEsperado = "https://login.microsoftonline.com/17dd3345-54db-49ce-8172-092f2ccd50fd/v2.0"

@@ -47,6 +47,15 @@ param(
     [Parameter(ParameterSetName = "Pkce")]
     [string]$RedirectUri = "http://localhost:4200/",
 
+    <#
+        Correo de la cuenta con la que se quiere entrar. Al indicarlo se usa
+        prompt=login en vez de select_account, que obliga a escribir la
+        contrasena: sin eso Entra ID reutiliza la sesion abierta del navegador
+        y devuelve un token de la cuenta anterior, aunque se pidiera otra.
+    #>
+    [Parameter(ParameterSetName = "Pkce")]
+    [string]$Cuenta,
+
     # Resource Owner Password Credentials. Requiere "Allow public client flows".
     [Parameter(Mandatory = $true, ParameterSetName = "Password")]
     [string]$Usuario,
@@ -174,7 +183,11 @@ if ($PSCmdlet.ParameterSetName -eq "Pkce") {
         "&state=$estado" +
         "&code_challenge=$challenge" +
         "&code_challenge_method=S256" +
-        "&prompt=select_account"
+        $(if ($Cuenta) {
+            "&prompt=login&login_hint=$([uri]::EscapeDataString($Cuenta))"
+        } else {
+            "&prompt=select_account"
+        })
 
     # Se levanta un receptor en el redirect URI para capturar el 'code' sin que
     # tengas que copiarlo de la barra de direcciones. Si el puerto esta ocupado
