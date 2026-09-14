@@ -62,3 +62,14 @@ desktop.ini
 # ---------------------------------------------------------------------------
 *.log
 logs/
+
+# ---------------------------------------------------------------------------
+# Postman en modo "colecciones en el sistema de archivos"
+# ---------------------------------------------------------------------------
+# Al abrir la carpeta, Postman la convierte a su formato interno (YAML por
+# peticion) y crea estos directorios. El export portable .json es el que se
+# versiona: es el que se puede importar en cualquier Postman y compartir.
+.postman/
+postman/
+*.environment.yaml
+pruebas/Pedidos360 - Matriz de seguridad EP1/
