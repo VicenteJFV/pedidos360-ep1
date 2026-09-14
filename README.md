@@ -78,7 +78,11 @@ Quedan en el portapapeles. Repetir con `Admin@...`.
 aws rds stop-db-instance --db-instance-identifier pedidos360-oracle --region us-east-1
 ```
 
-La EC2 se detiene sola al cerrar el lab; **la base no**, y sigue consumiendo presupuesto. RDS no permite tenerla detenida más de 7 días: pasado ese plazo AWS la enciende sola.
+La EC2 se detiene sola al cerrar el lab; **la base no**, y sigue consumiendo presupuesto.
+
+**Apágala antes de cerrar el lab, no después.** Cuando la sesión del lab termina, AWS aplica la política `voc-cancel-cred` a las credenciales y deniega *todas* las llamadas —incluida la de apagar la base—, así que si se te pasa hay que volver a iniciar el lab solo para eso. El comando devuelve al instante con estado `stopping`: no hace falta esperar a que termine, AWS completa el apagado aunque cierres el lab enseguida.
+
+RDS tampoco permite tenerla detenida más de 7 días: pasado ese plazo AWS la enciende sola. Si entre una sesión y otra pasa más de una semana, hay que entrar a apagarla de nuevo.
 
 ### Referencias fijas
 
