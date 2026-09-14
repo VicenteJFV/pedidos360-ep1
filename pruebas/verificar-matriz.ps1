@@ -212,6 +212,28 @@ if ($nuevo.Status -ne 201) {
     Comprobar "El cuerpo del error llega intacto hasta el cliente" $cuerpoUtil `
         "longitud=$($r.Texto.Length)  crudo=[$($r.Texto)]"
 
+    # Diagnostico: se comparan tres errores distintos que atraviesan el MISMO
+    # bloque catch del BFF. Tomcat solo cierra la conexion en el 400, asi que
+    # si los otros si traen cuerpo, la causa es el cierre y no el codigo del BFF.
+    if (-not $cuerpoUtil) {
+        Write-Host ""
+        Write-Host "  Comparando distintos codigos de error por el mismo camino:" -ForegroundColor Cyan
+
+        $sondas = @(
+            @{ Nombre = "404 producto inexistente"; Cuerpo = @{ clienteEmail = "x@duoc.cl"; items = @(@{ productoId = 999999; cantidad = 1 }) } },
+            @{ Nombre = "409 stock insuficiente  "; Cuerpo = @{ clienteEmail = "x@duoc.cl"; items = @(@{ productoId = $rc.Json[0].id; cantidad = 900 }) } },
+            @{ Nombre = "400 validacion de entrada"; Cuerpo = @{ clienteEmail = "no-es-un-correo"; items = @() } }
+        )
+        foreach ($s in $sondas) {
+            $x = Invoke-Api POST "/api/orders" -Token $TokenAdmin -Cuerpo $s.Cuerpo
+            $vista = if ($x.Texto.Length -gt 70) { $x.Texto.Substring(0, 70) + "..." } else { $x.Texto }
+            Write-Host ("    {0}  HTTP {1}  longitud={2}  {3}" -f $s.Nombre, $x.Status, $x.Texto.Length, $vista) -ForegroundColor DarkGray
+        }
+        Write-Host ""
+        Write-Host "    Si los 404/409 traen cuerpo y los 400 no, la causa es el cierre de" -ForegroundColor Yellow
+        Write-Host "    conexion que Tomcat aplica al 400, no el codigo del BFF." -ForegroundColor Yellow
+    }
+
     # Si el cuerpo llego vacio, se repite la llamada saltandose el API Gateway
     # para saber en que capa se pierde. El puerto del BFF esta abierto, asi que
     # se le puede preguntar directo.
