@@ -34,6 +34,74 @@ El API Gateway valida el JWT de Entra ID (`issuer` + `audience`), el BFF valida 
 
 La transición inválida devuelve `400` porque así lo exige la matriz de pruebas de la pauta (`PUT /api/orders/{id}/ship` con estado no apto). Semánticamente `409` sería más preciso —el recurso existe y la petición está bien formada, lo que falla es el estado— y así está documentado en `ManejadorGlobalErrores`.
 
+## Puesta en marcha
+
+El entorno vive en AWS Academy Learner Lab, cuya sesión caduca cada ~4 horas: la EC2 se detiene sola y la base hay que arrancarla a mano. Estos cinco pasos dejan todo operativo. **Cuentan unos 10 minutos**, casi todos esperando a Oracle.
+
+**1. Iniciar el lab** en AWS Academy y recargar las credenciales:
+
+```powershell
+cd C:\dev\pedidos360\aws ; .\01-credenciales-learner-lab.ps1
+```
+
+**2. Arrancar la base primero**, que es lo más lento (~5 min):
+
+```powershell
+aws rds start-db-instance --db-instance-identifier pedidos360-oracle --region us-east-1
+```
+
+**3. Arrancar la instancia** (~1 min; systemd levanta los tres servicios solo):
+
+```powershell
+aws ec2 start-instances --instance-ids i-0598cbdf24a3ab50e --region us-east-1
+```
+
+**4. Verificar** que los tres respondan:
+
+```powershell
+ssh -i C:\dev\pedidos360\aws\pedidos360-key.pem ec2-user@32.194.66.142 "systemctl is-active ms-catalog ms-orders bff"
+```
+
+Tres veces `active` y está listo.
+
+**5. Obtener tokens** para probar:
+
+```powershell
+cd C:\dev\pedidos360\pruebas ; .\obtener-token.ps1 -Cuenta "Cliente@luissantacruz2026.onmicrosoft.com"
+```
+
+Quedan en el portapapeles. Repetir con `Admin@...`.
+
+### Al terminar
+
+```powershell
+aws rds stop-db-instance --db-instance-identifier pedidos360-oracle --region us-east-1
+```
+
+La EC2 se detiene sola al cerrar el lab; **la base no**, y sigue consumiendo presupuesto. RDS no permite tenerla detenida más de 7 días: pasado ese plazo AWS la enciende sola.
+
+### Referencias fijas
+
+| | |
+| :--- | :--- |
+| URL pública | `https://xpglku1pj5.execute-api.us-east-1.amazonaws.com/Desarrollo` |
+| Instancia EC2 | `i-0598cbdf24a3ab50e` — IP elástica `32.194.66.142`, **no cambia** |
+| Base de datos | `pedidos360-oracle`, SID `PEDIDOS`, sin acceso público |
+| Región | `us-east-1` |
+
+Al conservarse la IP elástica, **el API Gateway nunca hay que reconfigurarlo** entre sesiones del lab.
+
+### Si algo falla
+
+| Síntoma | Causa probable |
+| :--- | :--- |
+| `ExpiredToken` en cualquier comando | La sesión del lab caducó: volver al paso 1 |
+| SSH da timeout | La instancia está detenida, o tu IP pública cambió y el Security Group solo admite la anterior |
+| El catálogo responde `[]` | La base no terminó de arrancar; esperar y reiniciar `ms-catalog` |
+| Todo responde 401 | Los tokens vencieron: duran una hora |
+
+---
+
 ## Estado de verificación
 
 | Qué | Resultado |
